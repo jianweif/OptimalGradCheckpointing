@@ -14,7 +14,7 @@ This is the official implementation of the paper: Jianwei Feng and Dong Huang, O
 
 **Regular Training vs. Gradient CheckPointing(GCP) Training:** **(a)** The regular training stores all tensors during forward, and uses these tensors to compute gradients during backward. **(b)** GCP stores a subset of tensors during the first forward, and conducts extra local re-forwards to compute tensors and gradients during backward. Our approach automatically searches the optimal set of Gradient Checkpoints (GCs) for memory cut-off. Such that on the same **physical** GPU memory (e.g., in 4 RTX2080Ti GPUs), GCP training can accommodate models that require **2+** times extra GPU memory. 
 
-![scheme_compare|200x100](./figures/scheme_compare_gradient_checkpoint.png)
+![scheme_compare|100x50](./figures/scheme_compare_gradient_checkpoint.png)
 ![table_compare](./figures/table_compare_gradient_checkpoint.png)
 
 
