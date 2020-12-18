@@ -1,8 +1,11 @@
 # Optimal Gradient Checkpoint Search
 This is the official implementation of the paper: Jianwei Feng and Dong Huang, Optimal Gradient Checkpoint Search for Arbitrary Computation Graphs. [arXiv version](https://arxiv.org/abs/1808.00079)
 
-![Optional Text](../main/figures/scheme_compare_gradient_checkpoint.png)
-![Optional Text](../main/figures/table_compare_gradient_checkpoint.png)
+Regular Training vs. Gradient CheckPointing(GCP) Training. (a) The regular training stores all tensors during forward, and uses these tensors to compute gradients during backward. (b) GCP stores a subset of tensors during the first forward, and conducts extra local re-forwards to compute tensors and gradients during backward. Our approach automatically searches the optimal set of Gradient Checkpoints (GCs) for memory cut-off. Such that on the same \textbf{physical} GPU memory (e.g., in 4 RTX2080Ti GPUs), GCP training can accommodate models that require 2+ times extra GPU memory. 
+
+![Optional Text](../main/figures/scheme_compare_gradient_checkpoint.png | width=200)
+![Optional Text](../main/figures/table_compare_gradient_checkpoint.png | width=200)
+
 ### Citation: 
 
 ```bash
