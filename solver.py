@@ -31,18 +31,6 @@ class ArbitrarySolver():
         self.linear_solver = LinearSolver()
     def solve(self, G, source, target):
         graph, cost, division_type = self.build_division_tree(G, source, target)
-        # # save_pickle('./tmp.pkl', graph)
-        # from utils import load_pickle
-        # graph = load_pickle('./tmp.pkl')
-        # division_type = 'linear'
-        # division_tree = nx.MultiDiGraph()
-        # division_tree.add_nodes_from({source: G.nodes[source]}, **G.nodes[source])
-        # division_tree.add_nodes_from({target: G.nodes[target]}, **G.nodes[target])
-        # id = division_tree.add_edge(source, target)
-        # division_tree.edges[(source, target, id)]['graph'] = graph
-        # division_tree.edges[(source, target, id)]['module'] = Segment(graph, source, target)
-        # division_tree.edges[(source, target, id)]['cost'] = cost
-        # division_tree.edges[(source, target, id)]['division_type'] = division_type
 
         max_terms = self.get_max_terms(graph, division_type, max_terms=set())
 
@@ -55,10 +43,6 @@ class ArbitrarySolver():
         best_max_term = -1
         best_gc_cost = -1
         for max_term in tqdm(max_terms):
-            # if max_term == 25690112:
-            #     print('test')
-            # else:
-            #     continue
             run_graph, gc_cost = self.solve_with_max(graph, source, target, max_term, division_type)
             total_cost = gc_cost + max_term
             if total_cost < best_total_cost:
@@ -66,58 +50,7 @@ class ArbitrarySolver():
                 best_run_graph = run_graph
                 best_max_term = max_term
                 best_gc_cost = gc_cost
-                # print(best_total_cost)
-
-        # best_run_graph = self.remap_transition(best_run_graph)
-        # print(best_max_term)
         return best_run_graph, best_total_cost
-
-
-    # def remap_transition(self, run_graph):
-    #     for node in run_graph.nodes:
-    #         transition = run_graph.nodes[node].get('transition', None)
-    #         if transition is not None:
-    #             transition_input_order = run_graph.nodes[node]['transition_input_order']
-    #             run_edges = []
-    #             for s in run_graph.predecessors(node):
-    #                 edges = run_graph.get_edge_data(s, node)
-    #                 for id in edges:
-    #                     run_edges.append((s, id))
-    #             if len(run_edges) != len(transition_input_order):
-    #                 print('Invalid graph')
-    #                 raise ValueError
-    #             new_transition_input_order = [None for _ in transition_input_order]
-    #             for i, edge in enumerate(run_edges):
-    #                 if edge in transition_input_order:
-    #                     new_transition_input_order[transition_input_order.index(edge)] = edge
-    #                     run_edges[i] = None
-    #             for i, ori_edge in enumerate(transition_input_order):
-    #                 if new_transition_input_order[i] is None:
-    #                     for j, run_edge in enumerate(run_edges):
-    #                         if run_edge is not None:
-    #                             s, id = run_edge
-    #                             s_ori, id_ori = ori_edge
-    #                             subgraph = run_graph.edges[(s, node, id)]['module']
-    #                             if type(subgraph) == Segment:
-    #                                 subgraph = subgraph.G
-    #                             else:
-    #                                 subgraph = None
-    #                             flag = False
-    #                             if subgraph is not None:
-    #                                 flag = self.edge_in_graph(subgraph, (s_ori, node, id_ori))
-    #                             if flag:
-    #                                 new_transition_input_order[i] = (s, id)
-    #                                 run_edges[j] = None
-    #                                 break
-    #             if None in run_edges or None in new_transition_input_order:
-    #                 print('Invalid graph')
-    #                 raise ValueError
-    #             run_graph.nodes[node]['transition_input_order'] = new_transition_input_order
-    #     return run_graph
-
-
-
-
 
     def edge_in_graph(self, run_graph, edge):
         if edge in run_graph.edges:
@@ -306,7 +239,6 @@ class ArbitrarySolver():
         return division_tree, total_cost, division_type
 
     def get_division(self, G, source, target, division_type=None):
-        # todo: branch division has some issues
         if division_type is None:
             nodes = list(nx.topological_sort(G))
             nodes.remove(source)

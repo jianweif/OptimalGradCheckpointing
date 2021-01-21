@@ -3,7 +3,7 @@ from torch.utils.checkpoint import checkpoint
 from queue import Queue
 import networkx as nx
 import torch
-from functools import partial
+
 
 def tuple_to_dict(t):
     l = list(t)
@@ -90,8 +90,9 @@ def graph_forward(G, source, target, x, do_checkpoint=True):
     :param target: target vertex key
     :param x: input tensor
     :param do_checkpoint: whether to do regular forward or checkpoint forward
-    :return: tuple (output tensor, source vertex id, edge id)
+    :return:
     '''
+
 
     tensor_dict = {source: (x, torch.tensor([-1.], requires_grad=True), torch.tensor([-1.], requires_grad=True))}
     queue = Queue()
@@ -130,7 +131,6 @@ def graph_forward(G, source, target, x, do_checkpoint=True):
                     input_tuple.append(outputs[key][0])
                     input_tuple.append(outputs[key][1])
                     input_tuple.append(outputs[key][2])
-
                 tensor_dict[target_vertex_id] = tuple(input_tuple)
 
                 if len(input_tuple) == num_input * 3:
@@ -139,9 +139,7 @@ def graph_forward(G, source, target, x, do_checkpoint=True):
                     tensor_dict[target_vertex_id] = (transition(inputs), torch.tensor([-1.], requires_grad=True), torch.tensor([-1.], requires_grad=True))
                     queue.put(target_vertex_id)
 
-
     return tensor_dict[target]
-
 
 
 class Segment(nn.Module):

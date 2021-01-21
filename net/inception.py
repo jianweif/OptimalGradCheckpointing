@@ -56,7 +56,7 @@ def inception_v3(pretrained=False, progress=True, **kwargs):
 class Inception3(nn.Module):
 
     def __init__(self, num_classes=1000, aux_logits=True, transform_input=False,
-                 inception_blocks=None, init_weights=True):
+                 inception_blocks=None, init_weights=True, drop_rate=0.5):
         super(Inception3, self).__init__()
         if inception_blocks is None:
             inception_blocks = [
@@ -73,6 +73,7 @@ class Inception3(nn.Module):
         inception_aux = inception_blocks[6]
 
         self.aux_logits = aux_logits
+        self.drop_rate = drop_rate
         self.transform_input = transform_input
         self.Conv2d_1a_3x3 = conv_block(3, 32, kernel_size=3, stride=2)
         self.Conv2d_2a_3x3 = conv_block(32, 32, kernel_size=3)
@@ -157,7 +158,7 @@ class Inception3(nn.Module):
         G.add_edge(vertex_id, vertex_id + 1, cost=0, module=op)
         vertex_id += 1
 
-        op = FunctionWrapper(partial(F.dropout, training=self.training))
+        op = FunctionWrapper(partial(F.dropout, training=self.training, p=self.drop_rate))
         x = op(x)
         G.add_node(vertex_id + 1, cost=x.numel())
         G.add_edge(vertex_id, vertex_id + 1, cost=0, module=op)
@@ -228,7 +229,7 @@ class Inception3(nn.Module):
         # Adaptive average pooling
         x = F.adaptive_avg_pool2d(x, (1, 1))
         # N x 2048 x 1 x 1
-        x = F.dropout(x, training=self.training)
+        x = F.dropout(x, training=self.training, p=self.drop_rate)
         # N x 2048 x 1 x 1
         x = torch.flatten(x, 1)
         # N x 2048

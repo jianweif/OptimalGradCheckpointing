@@ -1,7 +1,7 @@
 import torch
 from solver import ArbitrarySolver
 from graph import graph_forward, set_graph_training
-from utils import set_reproductibility
+from utils import set_reproductibility, disable_dropout
 import time
 import numpy as np
 from tqdm import tqdm
@@ -32,10 +32,10 @@ def forward_check(net, graph, run_graph, source, target, device, input_size=(1,3
     else:
         print('Run graph forward check failed: Max Difference {}'.format(max_run_graph_err))
 
+    torch.cuda.empty_cache()
+
 
 def backward_check(net, graph, run_graph, source, target, device, input_size=(1,3,224,224)):
-    # todo: some parameters are not shared reference among net, graph and run_graph
-
     inp = torch.rand(*input_size).to(device)
     inp.requires_grad = True
     net.train()
@@ -84,15 +84,16 @@ def backward_check(net, graph, run_graph, source, target, device, input_size=(1,
     else:
         print('Run graph backward check failed: Max Difference {}'.format(max_run_graph_err))
 
-def forward_backward_net(net, device, input_size=(1,3,224,224), repeat=100, min_repeat=5):
+    torch.cuda.empty_cache()
 
+def forward_backward_net(net, device, input_size=(1,3,224,224), repeat=100, min_repeat=5):
     # do backward 1 time to get gradients counted
     input2 = torch.rand(*input_size, device=device)
     input2.requires_grad = True
     output2 = net(input2)
     loss = torch.sum(output2)
     loss.backward()
-    # del input2, output2, loss
+    del input2, output2, loss
 
     # torch.cuda.empty_cache()
     torch.cuda.reset_max_memory_allocated(device)
@@ -108,11 +109,13 @@ def forward_backward_net(net, device, input_size=(1,3,224,224), repeat=100, min_
         loss.backward()
         end = time.time()
         regular_times.append(end - start)
-        # del input2, output2, loss
+        del input2, output2, loss
     regular_peak_memory = torch.cuda.max_memory_allocated(device)
     # torch.cuda.empty_cache()
     regular_end_memory = torch.cuda.memory_allocated(device)
     regular_avg_time = np.mean(np.array(regular_times)[min_repeat:])
+
+    torch.cuda.empty_cache()
 
     return regular_start_memory, regular_end_memory, regular_peak_memory, regular_avg_time
 
@@ -123,7 +126,7 @@ def forward_backward_run_graph(run_graph, source, target, device, input_size=(1,
     output1, _, _ = graph_forward(run_graph, source, target, input1, do_checkpoint=True)
     loss = torch.sum(output1)
     loss.backward()
-    # del input1, output1, loss
+    del input1, output1, loss
     # torch.cuda.empty_cache()
     torch.cuda.reset_max_memory_allocated(device)
     checkpoint_start_memory = torch.cuda.memory_allocated(device)
@@ -137,11 +140,13 @@ def forward_backward_run_graph(run_graph, source, target, device, input_size=(1,
         loss.backward()
         end = time.time()
         checkpoint_times.append(end - start)
-        # del input1, output1, loss
+        del input1, output1, loss
     checkpoint_peak_memory = torch.cuda.max_memory_allocated(device)
     # torch.cuda.empty_cache()
     checkpoint_end_memory = torch.cuda.memory_allocated(device)
     checkpoint_avg_time = np.mean(np.array(checkpoint_times)[min_repeat:])
+
+    torch.cuda.empty_cache()
 
     return checkpoint_start_memory, checkpoint_end_memory, checkpoint_peak_memory, checkpoint_avg_time
 
@@ -159,7 +164,6 @@ def forward_backward_benchmark(net, run_graph, source, target, device, input_siz
     regular_intermediate_tensors = regular_peak_memory - regular_pytorch_overhead
     checkpoint_intermediate_tensors = checkpoint_peak_memory - checkpoint_pytorch_overhead
 
-
     print('Average Iteration Time: Checkpointing {:.4f} s, Regular {:.4f} s, overhead {:.2f}%'.format(
         checkpoint_avg_time, regular_avg_time, (checkpoint_avg_time - regular_avg_time) * 100 / regular_avg_time))
     print('Average Peak Memory: Checkpointing {:.4f} MB, Regular {:.4f} MB, Memory Cut off {:.2f}%'.format(
@@ -169,12 +173,12 @@ def forward_backward_benchmark(net, run_graph, source, target, device, input_siz
 
 
 
-
 def main(arch, device):
     set_reproductibility(2020)
     input_size = input_sizes[arch]
     print('Processing {}, Input size {}'.format(arch, input_size) + '-' * 20)
     net = model_factory[arch]().to(device)
+    disable_dropout(arch, net)
     net.eval()
     inp = torch.rand(*input_size).to(device)
     G, source, target = net.parse_graph(inp)
@@ -182,23 +186,28 @@ def main(arch, device):
 
     start = time.time()
     run_graph, best_cost = solver.solve(G, source, target)
+    # tmp_compare_module(G, run_graph)
     end = time.time()
     print('Solving optimal gradient checkpointing takes {:.4f} s'.format(end - start))
 
-
     del inp
-    torch.cuda.empty_cache()
     forward_check(net, G, run_graph, source, target, device, input_size=input_size)
     backward_check(net, G, run_graph, source, target, device, input_size=input_size)
-    forward_backward_benchmark(net, run_graph, source, target, device, input_size=input_size, repeat=100, min_repeat=10)
+    # forward_backward_benchmark(net, run_graph, source, target, device, input_size=input_size, repeat=100)
+    forward_backward_benchmark(net, run_graph, source, target, device, input_size=input_size, repeat=100, min_repeat=30)
     del net, G, run_graph
     torch.cuda.empty_cache()
 
+
 def run_all():
     ### alexnet, vgg, inception backward check will fail because of drop out
+    # todo: densenet201 graident check failed, gradients for an nn.Batchnorm2d(64) doesn't match between net and run_graph
     device = torch.device('cuda:0')
+    # device = torch.device('cpu')
     for arch in model_factory:
+
         main(arch, device)
+
 
 
 
