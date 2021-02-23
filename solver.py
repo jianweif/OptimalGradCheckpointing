@@ -4,6 +4,7 @@ from queue import Queue
 from tqdm import tqdm
 from utils import add_vertex_cost_to_edge
 from graph import replace_subgraph, Segment
+from copy import deepcopy
 
 def tmp_compare_module(G1, G2):
     module_check_dict = {}
@@ -30,8 +31,9 @@ class ArbitrarySolver():
     def __init__(self):
         self.linear_solver = LinearSolver()
     def solve(self, G, source, target):
+        print('Building Division Tree')
         graph, cost, division_type = self.build_division_tree(G, source, target)
-
+        print('Getting Max Terms')
         max_terms = self.get_max_terms(graph, division_type, max_terms=set())
 
         best_run_graph = None
@@ -42,6 +44,7 @@ class ArbitrarySolver():
         max_terms = sorted(max_terms, reverse=True)
         best_max_term = -1
         best_gc_cost = -1
+        print('Solving Optimal for Each Max Term')
         for max_term in tqdm(max_terms):
             run_graph, gc_cost = self.solve_with_max(graph, source, target, max_term, division_type)
             total_cost = gc_cost + max_term
@@ -50,7 +53,78 @@ class ArbitrarySolver():
                 best_run_graph = run_graph
                 best_max_term = max_term
                 best_gc_cost = gc_cost
+
+        best_run_graph = self.optimize_run_graph(G, best_run_graph)
         return best_run_graph, best_total_cost
+
+    def optimize_run_graph(self, G, run_graph):
+        # flatten run graph to avoid too many recursions, and other optimization to speed up
+
+        # todo: this is a shallow copy, need to copy transition_input_order_list for each node as well
+        # todo: if transition only happens within the subgraph, need to handle it, also consider part of transition happens in subgraph, and part of happens in global graph
+        # todo: no need to remap transition as we have flattened run graph, the recursion depth is only 2
+        new_run_graph = run_graph.copy()
+        # transition_input_edges = {}
+        # for node_key in run_graph.nodes:
+        #     if 'transition_input_order' in run_graph.nodes[node_key]:
+        #         transition_input_order = run_graph.nodes[node_key]['transition_input_order']
+        #         for i, (start, id) in enumerate(transition_input_order):
+        #             transition_input_edges[(start, node_key, id)] = i
+
+
+        for edge_key in run_graph.edges:
+            source, target, id = edge_key
+            edge_nodes, edge_edges = self.nodes_edges_in_run_graph_edge(run_graph, edge_key)
+            subgraph = nx.MultiDiGraph()
+            for sub_node_key in edge_nodes:
+                subgraph.add_node(sub_node_key, **G.nodes[sub_node_key])
+            for sub_edge_key in edge_edges:
+                subgraph.add_edges_from({sub_edge_key: G.edges[sub_edge_key]}, **G.edges[sub_edge_key])
+            new_run_graph.edges[(source, target, id)]['graph'] = subgraph
+            new_run_graph.edges[(source, target, id)]['module'] = Segment(subgraph, source, target)
+            if 'transition' in new_run_graph.nodes[target]:
+                trans_complete = True
+                for (trans_source, trans_id) in new_run_graph.nodes[target]['transition_input_order']:
+                    if trans_source not in edge_nodes:
+                        trans_complete = False
+                        break
+                if trans_complete:
+                    # transition handled in subgraph
+                    new_run_graph.nodes[target]['transition'] = None
+                    new_run_graph.nodes[target]['transition_input_order'] = None
+
+
+            # for transition_edge_key in transition_input_edges:
+            #     if transition_edge_key in edge_edges:
+            #         # remap transition input
+            #         i = transition_input_edges[transition_edge_key]
+            #         trans_source, trans_target, trans_id = transition_edge_key
+            #         new_run_graph.nodes[trans_target]['transition_input_order'][i] = (source, id)
+        return new_run_graph
+
+
+
+    def nodes_edges_in_run_graph_edge(self, graph, edge_key):
+        start, end, id = edge_key
+
+        nodes = set()
+        nodes.add(start)
+        nodes.add(end)
+        edges = dict()
+
+        edge = graph.edges[edge_key]
+        subgraph = edge['module']
+        if type(subgraph) == Segment:
+            subgraph = subgraph.G
+            for e in subgraph.edges:
+                subnodes, subedges = self.nodes_edges_in_run_graph_edge(subgraph, e)
+                nodes = nodes.union(subnodes)
+                for key in subedges:
+                    edges[key] = subedges[key]
+            return nodes, edges
+        else:
+            edges[edge_key] = edge
+            return nodes, edges
 
     def edge_in_graph(self, run_graph, edge):
         if edge in run_graph.edges:
@@ -209,10 +283,10 @@ class ArbitrarySolver():
 
 
 
-    def build_division_tree(self, G, source, target):
+    def build_division_tree(self, G, source, target, known_division_type=None):
         if len(G.nodes) == 2:
             return G, 0, 'leave'
-        divisions, source_targets, division_type = self.get_division(G, source, target, division_type=None)
+        divisions, source_targets, division_type = self.get_division(G, source, target, division_type=None, known_division_type=known_division_type)
         if len(divisions) == 1:
             # leaves of division tree
             return G, 0, 'leave'
@@ -227,7 +301,7 @@ class ArbitrarySolver():
             if t not in division_tree.nodes:
                 division_tree.add_nodes_from({t: G.nodes[t]}, **G.nodes[t])
             id = division_tree.add_edge(s, t)
-            graph, cost, sub_division_type = self.build_division_tree(subgraph, s, t)
+            graph, cost, sub_division_type = self.build_division_tree(subgraph, s, t, known_division_type=division_type)
             division_tree.edges[(s, t, id)]['graph'] = graph
             division_tree.edges[(s, t, id)]['module'] = Segment(graph, s, t)
             division_tree.edges[(s, t, id)]['cost'] = cost
@@ -238,24 +312,30 @@ class ArbitrarySolver():
                 total_cost += division_tree.nodes[node]['cost']
         return division_tree, total_cost, division_type
 
-    def get_division(self, G, source, target, division_type=None):
+    def get_division(self, G, source, target, division_type=None, known_division_type=None):
         if division_type is None:
             nodes = list(nx.topological_sort(G))
             nodes.remove(source)
             nodes.remove(target)
-            for node in nodes:
-                ancestors = nx.ancestors(G, node)
-                descendants = nx.descendants(G, node)
-                subgraph1 = G.subgraph(list(ancestors) + [node])
-                subgraph2 = G.subgraph(list(descendants) + [node])
-                edges1 = set(subgraph1.edges)
-                edges2 = set(subgraph2.edges)
-                edges = set(G.edges)
-                if edges1.union(edges2) == edges and len(edges1.intersection(edges2)) == 0:
-                    # found splitting vertex
-                    division1, source_targets1, _ = self.get_division(subgraph1.copy(), source, node, division_type='linear')
-                    division2, source_targets2, _ = self.get_division(subgraph2.copy(), node, target, division_type='linear')
-                    return division1 + division2, source_targets1 + source_targets2, 'linear'
+
+            if known_division_type == 'linear':
+                # skipped finding splitting vertex
+                pass
+            else:
+                for node in nodes:
+                    ancestors = nx.ancestors(G, node)
+                    descendants = nx.descendants(G, node)
+                    subgraph1 = G.subgraph(list(ancestors) + [node])
+                    subgraph2 = G.subgraph(list(descendants) + [node])
+                    edges1 = set(subgraph1.edges)
+                    edges2 = set(subgraph2.edges)
+                    edges = set(G.edges)
+                    if edges1.union(edges2) == edges and len(edges1.intersection(edges2)) == 0:
+                        # found splitting vertex
+                        division1, source_targets1 = [subgraph1.copy()], [[source, node]]
+                        # division1, source_targets1, _ = self.get_division(subgraph1.copy(), source, node, division_type='linear')
+                        division2, source_targets2, _ = self.get_division(subgraph2.copy(), node, target, division_type='linear')
+                        return division1 + division2, source_targets1 + source_targets2, 'linear'
 
             # no splitting vertex found, check whether it has branches
             source_target_edge = G.get_edge_data(source, target)
@@ -323,8 +403,9 @@ class ArbitrarySolver():
                 edges = set(G.edges)
                 if edges1.union(edges2) == edges and len(edges1.intersection(edges2)) == 0:
                     # found splitting vertex
-                    division1, source_targets1, divi_type = self.get_division(subgraph1.copy(), source, node,
-                                                                   division_type='linear')
+                    # division1, source_targets1, divi_type = self.get_division(subgraph1.copy(), source, node,
+                    #                                                division_type='linear')
+                    division1, source_targets1 = [subgraph1.copy()], [[source, node]]
                     division2, source_targets2, divi_type = self.get_division(subgraph2.copy(), node, target,
                                                                    division_type='linear')
                     return division1 + division2, source_targets1 + source_targets2, division_type
@@ -373,15 +454,28 @@ class ArbitrarySolver():
                 return [subgraph1] + division2, [[source, target]] + source_targets2, division_type
         elif division_type == 'complicate':
             nodes = list(nx.topological_sort(G))
+            adjacency_matrix = np.array(nx.linalg.graphmatrix.adjacency_matrix(G, nodelist=nodes).todense())
+            reverse_mapping = {node: i for i, node in enumerate(nodes)}
+            # counting undirected adjacency
+            adjacency_matrix = adjacency_matrix + adjacency_matrix.T
+            path_adjacency_matrix = adjacency_matrix.copy()
+            descendants_all = {node: nx.descendants(G, node) for node in nodes}
+            ancestors_all = {node: nx.ancestors(G, node) for node in nodes}
+            for node in nodes:
+                idx = reverse_mapping[node]
+                for n in descendants_all[node]:
+                    path_adjacency_matrix[idx, reverse_mapping[n]] += 1
+                for n in ancestors_all[node]:
+                    path_adjacency_matrix[idx, reverse_mapping[n]] += 1
             subgraphs = []
             source_targets_all = []
-            for i in range(len(nodes) - 1):
+            for i in tqdm(range(len(nodes) - 1)):
                 for j in range(i + 1, len(nodes)):
                     node1, node2 = nodes[i], nodes[j]
                     if node1 == source and node2 == target:
                         continue
 
-                    subgraph = self.get_largest_IS(G, node1, node2)
+                    subgraph = self.get_largest_IS(G, node1, node2, descendants_all, ancestors_all, adjacency_matrix, path_adjacency_matrix, np.array(nodes), reverse_mapping)
 
                     if subgraph is not None:
                         subgraphs.append(subgraph)
@@ -407,9 +501,9 @@ class ArbitrarySolver():
             return divisions, source_targets, division_type
         else:
             raise KeyError
-    def get_largest_IS(self, G, node1, node2):
-        ancestors = nx.ancestors(G, node2)
-        descendants = nx.descendants(G, node1)
+    def get_largest_IS_old(self, G, node1, node2, descendants_all, ancestors_all, successors_all, predecessors_all, adjacency_matrix):
+        ancestors = ancestors_all[node2]
+        descendants = descendants_all[node1]
         subgraph_nodes = set(ancestors).intersection(set(descendants))
         subgraph_nodes = subgraph_nodes.union({node1, node2})
         subgraph = G.subgraph(subgraph_nodes).copy()
@@ -417,14 +511,14 @@ class ArbitrarySolver():
         for node in subgraph_nodes:
             valid_node = True
             if node != node1 and node != node2:
-                for p in G.predecessors(node):
+                for p in predecessors_all[node]:
                     if p not in subgraph_nodes:
                         valid_node = False
                         remove_queue.put(node)
                         break
                 if not valid_node:
                     continue
-                for s in G.successors(node):
+                for s in successors_all[node]:
                     if s not in subgraph_nodes:
                         valid_node = False
                         remove_queue.put(node)
@@ -457,6 +551,37 @@ class ArbitrarySolver():
         else:
             return subgraph
 
+    def get_largest_IS(self, G, node1, node2, descendants_all, ancestors_all, adjacency_matrix, path_adjacency_matrix, adjacency_nodes_mapping, reverse_mapping):
+
+        ancestors = ancestors_all[node2]
+        descendants = descendants_all[node1]
+        subgraph_nodes = set(ancestors).intersection(set(descendants))
+        subgraph_nodes = subgraph_nodes.union({node1, node2})
+        other_nodes = set(G.nodes).difference(subgraph_nodes)
+
+        subgraph_inside_nodes_idxs = np.array([reverse_mapping[n] for n in subgraph_nodes.difference({node1, node2})])
+        if len(subgraph_inside_nodes_idxs) == 0:
+            subgraph = G.subgraph(subgraph_nodes)
+        else:
+            other_nodes_idxs = np.array([reverse_mapping[n] for n in other_nodes])
+            adjacency = np.sum(adjacency_matrix[other_nodes_idxs, :][:, subgraph_inside_nodes_idxs], axis=0)
+            removed_inside_nodes_idxs = subgraph_inside_nodes_idxs[adjacency > 0]
+            if len(removed_inside_nodes_idxs) > 0:
+                path_adjacency_submat = path_adjacency_matrix[removed_inside_nodes_idxs, :][:, subgraph_inside_nodes_idxs]
+                path_adjacency = np.sum(path_adjacency_submat, axis=0)
+                extra_removed_inside_nodes_idxs = subgraph_inside_nodes_idxs[path_adjacency > 0]
+                removed_nodes = set(adjacency_nodes_mapping[removed_inside_nodes_idxs]).union(set(adjacency_nodes_mapping[extra_removed_inside_nodes_idxs]))
+
+                remaining_subgraph_nodes = subgraph_nodes.difference(removed_nodes)
+            else:
+                remaining_subgraph_nodes = subgraph_nodes
+            subgraph = G.subgraph(remaining_subgraph_nodes)
+
+
+        if len(subgraph.edges) == 0 or (not nx.is_connected(subgraph.to_undirected())):
+            return None
+        else:
+            return subgraph.copy()
 
 class LinearSolver():
     def __init__(self):

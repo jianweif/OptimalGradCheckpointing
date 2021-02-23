@@ -1,9 +1,9 @@
 from net.alexnet import *
-# from net.densenet import *
 from net.densenet import *
 from net.inception import *
 from net.resnet import *
 from net.vgg import *
+from net.darts.model import darts_cifar10, nasnet_cifar10, amoebanet_cifar10
 
 model_factory = {
     'alexnet': alexnet,
@@ -21,6 +21,9 @@ model_factory = {
     'densenet161': densenet161,
     'densenet169': densenet169,
     'densenet201': densenet201,
+    'darts_cifar10': darts_cifar10,
+    'nasnet_cifar10': nasnet_cifar10,
+    'amoebanet_cifar10': amoebanet_cifar10,
 }
 
 input_sizes = {
@@ -39,4 +42,7 @@ input_sizes = {
     'densenet161': (16, 3, 224, 224),
     'densenet169': (32, 3, 224, 224),
     'densenet201': (16, 3, 224, 224),
+    'darts_cifar10': (4, 3, 32, 32),
+    'nasnet_cifar10': (4, 3, 32, 32),
+    'amoebanet_cifar10': (4, 3, 32, 32),
 }

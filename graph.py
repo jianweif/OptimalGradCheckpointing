@@ -4,7 +4,6 @@ from queue import Queue
 import networkx as nx
 import torch
 
-
 def tuple_to_dict(t):
     l = list(t)
     num = len(l) // 3
@@ -13,6 +12,29 @@ def tuple_to_dict(t):
         tensor, s, ind = t[i * 3], t[i * 3 + 1], t[i * 3 + 2]
         d[(int(s), int(ind))] = (tensor, s, ind)
     return d
+
+def tuple_to_dict_new(t):
+    l = list(t)
+    num = len(l) // 3
+    d = {}
+    for i in range(num):
+        tensor, s, ind = t[i * 3], t[i * 3 + 1], t[i * 3 + 2]
+        d[(int(s), int(ind))] = tensor
+    return d
+
+def dict_to_tuple(d):
+    l = []
+    for (s, ind) in d:
+        tensor = d[(s, ind)]
+        l.append(tensor)
+        # has to use float otherwise throw requires_grad error
+        l.append(torch.tensor([float(s)], requires_grad=True))
+        l.append(torch.tensor([float(ind)], requires_grad=True))
+    return tuple(l)
+
+def set_segment_training(segment, train=True):
+    set_graph_training(segment.G, train=train)
+
 
 def set_graph_training(graph, train=True):
     for e in graph.edges:
@@ -82,7 +104,8 @@ def segment_checkpoint_forward(segment):
 
     return custom_forward
 
-def graph_forward(G, source, target, x, do_checkpoint=True):
+# NOTE: checkpoint autograd.function doesn't allow dictionary output, so have to use tensor to hold vertex id
+def graph_forward(x, G=None, source=None, target=None, successors_dict=None, predecessors_dict=None, edges_dict=None, do_checkpoint=True):
     '''
     Do checkpoint forward with each vertex in G as gradient checkpoint or do regular forward with G
     :param G: networkx DAG
@@ -93,31 +116,33 @@ def graph_forward(G, source, target, x, do_checkpoint=True):
     :return:
     '''
 
-
-    tensor_dict = {source: (x, torch.tensor([-1.], requires_grad=True), torch.tensor([-1.], requires_grad=True))}
+    tensor_dict = {source: x}
     queue = Queue()
     queue.put(source)
     while not queue.empty():
         vertex_key = queue.get()
-        for target_vertex_id in G.successors(vertex_key):
-            edges = G.get_edge_data(vertex_key, target_vertex_id)
+        for target_vertex_id in successors_dict[vertex_key]:
+            edges = edges_dict[(vertex_key, target_vertex_id)]
             target_vertex = G.nodes[target_vertex_id]
             outputs = {}
             for id in edges:
                 op = edges[id]['module']
-                input, _, _ = tensor_dict[vertex_key]
+                input = tensor_dict[vertex_key]
                 if do_checkpoint:
                     output = checkpoint(segment_checkpoint_forward(op), input)
                 else:
                     output = op(input)
 
                 if type(output) == tuple:
-                    outputs.update(tuple_to_dict(output))
+                    output = tuple_to_dict_new(output)
+                    for key in output:
+                        outputs[key] = output[key]
                 else:
-                    output = (output, torch.tensor([float(vertex_key)], requires_grad=True), torch.tensor([float(id)], requires_grad=True))
-                    outputs.update(tuple_to_dict(output))
+                    outputs[(vertex_key, id)] = output
+
+
             transition = target_vertex.get('transition', None)
-            if transition is None or (len([n for n in G.predecessors(target_vertex_id)]) == 1 and len(edges) == 1):
+            if transition is None:
                 tensor_dict[target_vertex_id] = outputs[list(outputs.keys())[0]]
                 queue.put(target_vertex_id)
             else:
@@ -125,35 +150,48 @@ def graph_forward(G, source, target, x, do_checkpoint=True):
                 transition_input_order = target_vertex['transition_input_order']
                 num_input = len(transition_input_order)
 
-                input_tuple = list(tensor_dict.get(target_vertex_id, ()))
+                inputs_for_transit = tensor_dict.get(target_vertex_id, {})
                 for key in outputs:
-                    # a workaround
-                    input_tuple.append(outputs[key][0])
-                    input_tuple.append(outputs[key][1])
-                    input_tuple.append(outputs[key][2])
-                tensor_dict[target_vertex_id] = tuple(input_tuple)
-
-                if len(input_tuple) == num_input * 3:
-                    input_dict = tuple_to_dict(input_tuple)
-                    inputs = [input_dict[i][0] for i in transition_input_order]
-                    tensor_dict[target_vertex_id] = (transition(inputs), torch.tensor([-1.], requires_grad=True), torch.tensor([-1.], requires_grad=True))
+                    inputs_for_transit[key] = outputs[key]
+                if len(inputs_for_transit) == num_input:
+                    inputs = [inputs_for_transit[i] for i in transition_input_order]
+                    tensor_dict[target_vertex_id] = transition(inputs)
                     queue.put(target_vertex_id)
-
-    return tensor_dict[target]
+                else:
+                    tensor_dict[target_vertex_id] = inputs_for_transit
+    if type(tensor_dict[target]) == dict:
+        return dict_to_tuple(tensor_dict[target])
+    else:
+        return tensor_dict[target]
 
 
 class Segment(nn.Module):
     '''
     wrapper class for inference with DAG
     '''
-    def __init__(self, G, source, target):
+    def __init__(self, G, source, target, do_checkpoint=False):
         super(Segment, self).__init__()
         self.G = G
         self.source = source
         self.target = target
+        self.info_dict = self.prepare_for_forward(G, source, target, do_checkpoint)
+
+    def prepare_for_forward(self, G, source, target, do_checkpoint):
+        info_dict = {'G': G, 'source': source, 'target': target}
+        successors_dict, predecessors_dict, edges_dict = {}, {}, {}
+        for v in G.nodes:
+            predecessors_dict[v] = [n for n in G.predecessors(v)]
+            successors_dict[v] = [n for n in G.successors(v)]
+        for key in G.edges:
+            e = G.edges[key]
+            start, end, id = key
+            if (start, end) not in edges_dict:
+                edges_dict[(start, end)] = {}
+            edges_dict[(start, end)][id] = e
+        info_dict.update(successors_dict=successors_dict, predecessors_dict=predecessors_dict, edges_dict=edges_dict,
+                         do_checkpoint=do_checkpoint)
+        return info_dict
+
 
     def forward(self, x):
-        source = self.source
-        target = self.target
-        G = self.G
-        return graph_forward(G, source, target, x, do_checkpoint=False)
+        return graph_forward(x, **self.info_dict)
