@@ -424,11 +424,14 @@ class ArbitrarySolver():
                     path_adjacency_matrix[idx, reverse_mapping[n]] += 1
                 for n in ancestors_all[node]:
                     path_adjacency_matrix[idx, reverse_mapping[n]] += 1
+
+            candidate_nodes = [node for i, node in enumerate(nodes) if np.sum(adjacency_matrix[i, :]) > 2 or node == source or node == target]
             subgraphs = []
             source_targets_all = []
-            for i in tqdm(range(len(nodes) - 1)):
-                for j in range(i + 1, len(nodes)):
-                    node1, node2 = nodes[i], nodes[j]
+            for i in tqdm(range(len(candidate_nodes) - 1)):
+                # for j in range(i + 1, len(nodes)):
+                for j in range(len(candidate_nodes) - 1, i, -1):
+                    node1, node2 = candidate_nodes[i], candidate_nodes[j]
                     if node1 == source and node2 == target:
                         continue
 
