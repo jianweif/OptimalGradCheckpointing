@@ -36,6 +36,7 @@ pip install -r requirements.txt
 ```
 
 ## Run Optimal Gradient Checkpointing
+Run Optimal Gradient Checkpointing on Resnet101
 ```
-python main.py
+python main.py --arch resnet101 --device cuda:0
 ```

@@ -192,6 +192,7 @@ class FactorizedReduce(nn.Module):
 
 
     def forward(self, x):
+        x = self.relu(x)
         out = torch.cat([self.conv_1(x), self.conv_2(x[:, :, 1:, 1:])], dim=1)
         out = self.bn(out)
         return out
@@ -219,7 +220,7 @@ class FactorizedReduce(nn.Module):
         op2 = Conv2Wrapper(conv=self.conv_2)
         x2 = op2(x)
         G.add_node(vertex_id + 1, cost=x2.numel(), shape=list(x2.shape))
-        G.add_edge(input_id, vertex_id + 1, cost=0, module=op1)
+        G.add_edge(input_id, vertex_id + 1, cost=0, module=op2)
         vertex_id += 1
         x2_id = vertex_id
 

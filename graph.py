@@ -10,15 +10,6 @@ def tuple_to_dict(t):
     d = {}
     for i in range(num):
         tensor, s, ind = t[i * 3], t[i * 3 + 1], t[i * 3 + 2]
-        d[(int(s), int(ind))] = (tensor, s, ind)
-    return d
-
-def tuple_to_dict_new(t):
-    l = list(t)
-    num = len(l) // 3
-    d = {}
-    for i in range(num):
-        tensor, s, ind = t[i * 3], t[i * 3 + 1], t[i * 3 + 2]
         d[(int(s), int(ind))] = tensor
     return d
 
@@ -134,7 +125,7 @@ def graph_forward(x, G=None, source=None, target=None, successors_dict=None, pre
                     output = op(input)
 
                 if type(output) == tuple:
-                    output = tuple_to_dict_new(output)
+                    output = tuple_to_dict(output)
                     for key in output:
                         outputs[key] = output[key]
                 else:

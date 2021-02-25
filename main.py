@@ -1,20 +1,23 @@
 import torch
 from solver import ArbitrarySolver
-from graph import graph_forward, Segment, set_segment_training
+from graph import Segment, set_segment_training
 from utils import set_reproductibility, disable_dropout
 import time
 import numpy as np
 from tqdm import tqdm
 from net.model_factory import model_factory, input_sizes
 from utils import load_pickle, save_pickle
+import argparse
 
 torch.backends.cudnn.enabled = True
+
 
 def forward_check(net, parsed_segment, run_segment, device, input_size=(1,3,224,224)):
     inp = torch.rand(*input_size).to(device)
     net.train()
-    set_segment_training(parsed_segment, train=False)
-    set_segment_training(run_segment, train=False)
+    # net.eval()
+    set_segment_training(parsed_segment, train=True)
+    set_segment_training(run_segment, train=True)
 
     with torch.no_grad():
         ori_output = net(inp)
@@ -127,7 +130,7 @@ def forward_backward(module, device, input_size=(1,3,224,224), repeat=100, min_r
     return regular_start_memory, regular_end_memory, regular_peak_memory, regular_avg_time
 
 
-def forward_backward_benchmark(net, run_segment, source, target, device, input_size=(1,3,224,224), repeat=100, min_repeat=5):
+def forward_backward_benchmark(net, run_segment, device, input_size=(1,3,224,224), repeat=100, min_repeat=5):
     assert repeat > min_repeat
     net.train()
 
@@ -168,21 +171,31 @@ def main(arch, device):
     end = time.time()
     print('Solving optimal gradient checkpointing takes {:.4f} s'.format(end - start))
 
-    del inp
     forward_check(net, parsed_segment, run_segment, device, input_size=input_size)
     backward_check(net, parsed_segment, run_segment, device, input_size=input_size)
-    forward_backward_benchmark(net, run_segment, source, target, device, input_size=input_size, repeat=100, min_repeat=30)
-    del net, G, run_graph
-    torch.cuda.empty_cache()
+    forward_backward_benchmark(net, run_segment, device, input_size=input_size, repeat=100, min_repeat=30)
 
 
-def run_all():
-    device = torch.device('cuda:0')
-    # for arch in model_factory:
-    for arch in ['nasnet_cifar10', 'amoebanet_cifar10']:
-        main(arch, device)
+def parse_args():
+    parser = argparse.ArgumentParser(description='Run Optimal Gradient Checkpoiting')
+    parser.add_argument('--arch',
+                        help='network architecture name',
+                        required=True,
+                        type=str)
+    parser.add_argument('--device',
+                        help='gpu device',
+                        default='cuda:0',
+                        type=str)
 
+    args = parser.parse_args()
 
+    return args
 
 if __name__ == '__main__':
-    run_all()
+    args = parse_args()
+    device = torch.device(args.device)
+    arch = args.arch
+    if arch not in model_factory:
+        print('Available Archs are {}'.format(model_factory.keys()))
+        raise KeyError
+    main(arch, device)

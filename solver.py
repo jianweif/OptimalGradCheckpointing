@@ -4,27 +4,6 @@ from queue import Queue
 from tqdm import tqdm
 from utils import add_vertex_cost_to_edge
 from graph import replace_subgraph, Segment
-from copy import deepcopy
-
-def tmp_compare_module(G1, G2):
-    module_check_dict = {}
-    for edge in G1.edges:
-        module1 = G1.edges[edge]['module']
-        module2 = tmp_find_module(G2, edge)
-        module_check_dict[edge] = module1 is module2
-
-def tmp_find_module(G, edge):
-    for e in G.edges:
-        module = G.edges[e]['module']
-        if isinstance(module, Segment):
-            m = tmp_find_module(module.G, edge)
-            if m is not None:
-                return m
-        else:
-            if edge == e:
-                return module
-
-    return None
 
 
 class ArbitrarySolver():
@@ -60,17 +39,7 @@ class ArbitrarySolver():
     def optimize_run_graph(self, G, run_graph):
         # flatten run graph to avoid too many recursions, and other optimization to speed up
 
-        # todo: this is a shallow copy, need to copy transition_input_order_list for each node as well
-        # todo: if transition only happens within the subgraph, need to handle it, also consider part of transition happens in subgraph, and part of happens in global graph
-        # todo: no need to remap transition as we have flattened run graph, the recursion depth is only 2
         new_run_graph = run_graph.copy()
-        # transition_input_edges = {}
-        # for node_key in run_graph.nodes:
-        #     if 'transition_input_order' in run_graph.nodes[node_key]:
-        #         transition_input_order = run_graph.nodes[node_key]['transition_input_order']
-        #         for i, (start, id) in enumerate(transition_input_order):
-        #             transition_input_edges[(start, node_key, id)] = i
-
 
         for edge_key in run_graph.edges:
             source, target, id = edge_key
@@ -94,15 +63,7 @@ class ArbitrarySolver():
                     new_run_graph.nodes[target]['transition_input_order'] = None
 
 
-            # for transition_edge_key in transition_input_edges:
-            #     if transition_edge_key in edge_edges:
-            #         # remap transition input
-            #         i = transition_input_edges[transition_edge_key]
-            #         trans_source, trans_target, trans_id = transition_edge_key
-            #         new_run_graph.nodes[trans_target]['transition_input_order'][i] = (source, id)
         return new_run_graph
-
-
 
     def nodes_edges_in_run_graph_edge(self, graph, edge_key):
         start, end, id = edge_key
@@ -281,8 +242,6 @@ class ArbitrarySolver():
                     max_terms = self.get_max_terms(graph, divi_type, max_terms)
             return max_terms
 
-
-
     def build_division_tree(self, G, source, target, known_division_type=None):
         if len(G.nodes) == 2:
             return G, 0, 'leave'
@@ -294,8 +253,6 @@ class ArbitrarySolver():
         total_cost = 0
         for subgraph, source_target in zip(divisions, source_targets):
             s, t = source_target
-            # if s == 172:
-            #     print('test')
             if s not in division_tree.nodes:
                 division_tree.add_nodes_from({s: G.nodes[s]}, **G.nodes[s])
             if t not in division_tree.nodes:
@@ -501,56 +458,8 @@ class ArbitrarySolver():
             return divisions, source_targets, division_type
         else:
             raise KeyError
-    def get_largest_IS_old(self, G, node1, node2, descendants_all, ancestors_all, successors_all, predecessors_all, adjacency_matrix):
-        ancestors = ancestors_all[node2]
-        descendants = descendants_all[node1]
-        subgraph_nodes = set(ancestors).intersection(set(descendants))
-        subgraph_nodes = subgraph_nodes.union({node1, node2})
-        subgraph = G.subgraph(subgraph_nodes).copy()
-        remove_queue = Queue()
-        for node in subgraph_nodes:
-            valid_node = True
-            if node != node1 and node != node2:
-                for p in predecessors_all[node]:
-                    if p not in subgraph_nodes:
-                        valid_node = False
-                        remove_queue.put(node)
-                        break
-                if not valid_node:
-                    continue
-                for s in successors_all[node]:
-                    if s not in subgraph_nodes:
-                        valid_node = False
-                        remove_queue.put(node)
-                        break
-                if not valid_node:
-                    continue
 
-        while not remove_queue.empty():
-            node = remove_queue.get()
-            remove_edge_list = []
-            for p in subgraph.predecessors(node):
-                edges = subgraph.get_edge_data(p, node)
-                for e in edges:
-                    remove_edge_list.append((p, node, e))
-                if p != node1 and p != node2 and not p in remove_queue.queue:
-                    remove_queue.put(p)
-            for s in subgraph.successors(node):
-                edges = subgraph.get_edge_data(node, s)
-                for e in edges:
-                    remove_edge_list.append((node, s, e))
-                if s != node1 and s != node2 and not s in remove_queue.queue:
-                    remove_queue.put(s)
-            for edge in remove_edge_list:
-                subgraph.remove_edge(*edge)
-            subgraph.remove_node(node)
-
-
-        if len(subgraph.edges) == 0:
-            return None
-        else:
-            return subgraph
-
+    # todo: this need to be speed up, the while loop is time consuming
     def get_largest_IS(self, G, node1, node2, descendants_all, ancestors_all, adjacency_matrix, path_adjacency_matrix, adjacency_nodes_mapping, reverse_mapping):
 
         ancestors = ancestors_all[node2]
@@ -567,11 +476,23 @@ class ArbitrarySolver():
             adjacency = np.sum(adjacency_matrix[other_nodes_idxs, :][:, subgraph_inside_nodes_idxs], axis=0)
             removed_inside_nodes_idxs = subgraph_inside_nodes_idxs[adjacency > 0]
             if len(removed_inside_nodes_idxs) > 0:
-                path_adjacency_submat = path_adjacency_matrix[removed_inside_nodes_idxs, :][:, subgraph_inside_nodes_idxs]
-                path_adjacency = np.sum(path_adjacency_submat, axis=0)
-                extra_removed_inside_nodes_idxs = subgraph_inside_nodes_idxs[path_adjacency > 0]
-                removed_nodes = set(adjacency_nodes_mapping[removed_inside_nodes_idxs]).union(set(adjacency_nodes_mapping[extra_removed_inside_nodes_idxs]))
 
+                prev_remove_num = len(removed_inside_nodes_idxs)
+                while True:
+                    remaining_subgraph_inside_nodes_idx = set(subgraph_inside_nodes_idxs).difference(set(removed_inside_nodes_idxs))
+                    if len(remaining_subgraph_inside_nodes_idx) <= 0:
+                        break
+                    remaining_subgraph_inside_nodes_idx = np.array(list(remaining_subgraph_inside_nodes_idx))
+                    path_adjacency_submat = path_adjacency_matrix[removed_inside_nodes_idxs, :][:, remaining_subgraph_inside_nodes_idx]
+                    path_adjacency = np.sum(path_adjacency_submat, axis=0)
+                    extra_removed_inside_nodes_idxs = remaining_subgraph_inside_nodes_idx[path_adjacency > 0]
+                    removed_inside_nodes_idxs = set(removed_inside_nodes_idxs).union(set(extra_removed_inside_nodes_idxs))
+                    cur_remove_num = len(removed_inside_nodes_idxs)
+                    removed_inside_nodes_idxs = np.array(list(removed_inside_nodes_idxs))
+                    if cur_remove_num == prev_remove_num:
+                        break
+                    prev_remove_num = cur_remove_num
+                removed_nodes = set(adjacency_nodes_mapping[removed_inside_nodes_idxs])
                 remaining_subgraph_nodes = subgraph_nodes.difference(removed_nodes)
             else:
                 remaining_subgraph_nodes = subgraph_nodes

@@ -19,7 +19,7 @@ def disable_dropout(arch, net):
             for i in range(num_layers):
                 layer = block.__getattr__('denselayer%d' % (i + 1))
                 layer.drop_rate = 0
-    elif arch in ['darts_cifar10']:
+    elif arch in ['darts_cifar10', 'nasnet_cifar10', 'amoebanet_cifar10']:
         net.drop_path_prob = 0
     else:
         pass
