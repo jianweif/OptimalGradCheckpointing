@@ -1,5 +1,5 @@
-# Optimal Gradient Checkpoint Search
-This is the official implementation of the paper: Jianwei Feng and Dong Huang, Optimal Gradient Checkpoint Search for Arbitrary Computation Graphs. [arXiv version](https://arxiv.org/abs/1808.00079)
+# Optimal Gradient Checkpoint Search for Arbitrary Computation Graphs
+This is the official implementation of the paper: Jianwei Feng and Dong Huang, Optimal Gradient Checkpoint Search for Arbitrary Computation Graphs. [arXiv version](https://arxiv.org/pdf/1808.00079v5.pdf)
 
 ### Citation: 
 
@@ -17,8 +17,29 @@ This is the official implementation of the paper: Jianwei Feng and Dong Huang, O
 ![scheme_compare](./figures/scheme_compare_gradient_checkpoint.png)<!-- .element height="20%" width="20%" -->
 ![table_compare](./figures/table_compare_gradient_checkpoint.png)<!-- .element height="20%" width="20%" -->
 
+# Reducing Training Memory by Optimal Gradient Checkpointing
+| Model Name |   Input Size  |    Regular Training Memory (MB)    |     OGC Training Memory (MB)    |    Memory Cut off   |   Regular Training Time (s)  |    OGC Training Time (s)  |   Time Overhead   |
+|:------------------:|:--------------:|:--------------:|:--------------:|:--------------:|:--------------:|:--------------:|:--------------:|
+|       Alexnet      |      (1024, 3, 224, 224)      |      4955      |      3287      |      34%      |      0.388      |      0.519      |       34%      |
+|      VGG 11      |     (64, 3, 224, 224)     |     3577     |     2781     |     22%    |     0.266     |     0.356     |      34%      |
+|     VGG 13    |  (64, 3, 224, 224) | 5136 | 3565 | 31% | 0.418 | 0.558 |      33%      |
+|     VGG 16     |   (64, 3, 224, 224)   |   5136   |   3565   |   31%   |   0.503   |   0.666   |      32%      |
+|    VGG 19    |      (64, 3, 224, 224)      |      5189      |    3565   |       31%      |    0.581   |    0.774   |      33%      |
+|     Resnet 18    |    (256, 3, 224, 224)    |    5635    |    3677    |    35%    |    0.422    |    0.548    |      30%      |
+|     Resnet 34    |  (128, 3, 224, 224)  |   4079  |  1838 |  55%  |  0.364 |  0.493  |      35%      |
+|    Resnet 50    |  (64, 3, 224, 224) |   5323   |  1973 |  63%  |  0.394 |  0.516  |      31%      |
+|    Resnet 101   |  (32, 3, 224, 224)  |  3934  |  1024  |  74%  |  0.356  |  0.482  |      35%      |
+|    Resnet 152       |   (16, 3, 224, 224)  |     2767     |   526   |   81%    |   0.241  |   0.331  |      37%      |
+|  Densenet 121  |     (32, 3, 224, 224)    |     4027     |    898    |     78%    |     0.218    |     0.292    |      34%      |
+|  Densenet 161  |    (16, 3, 224, 224)    |    3751   |     666    |   82%   |    0.252    |   0.341   |       36%      |
+|    Densenet 169       |     (32, 3, 224, 224)   |    4862   |    897   |    82%    |    0.270   |    0.357   |      32%      |
+|    Densenet 201    | (16, 3, 224, 224) |  3146  |  474 |  85% | 0.200 | 0.306 |      53%      |
+|    Inception v3    | (32, 3, 300, 300)|  3074  |  881 |  71% | 0.291 | 0.374 |      29%      |
+|    NASNet Cifar10   | (64, 3, 32, 32) |  5832  |  1129 |  81% | 0.408 | 0.535 |      31%      |
+|    AmoebaNet Cifar10    | (64, 3, 32, 32) |  4944  |  1058 |  79% | 0.331 | 0.450 |      36%      |
+|    DARTS Cifar10    | (64, 3, 32, 32) |  5627  |  1115 |  80% | 0.318 | 0.494 |      55%      |
 
-
+The memory numbers in the table are calculated after removing stationary memory cost such as model weights and pytorch cuda interface.
 ## Installation
 
 ### Requirements:
@@ -36,7 +57,18 @@ pip install -r requirements.txt
 ```
 
 ## Run Optimal Gradient Checkpointing
-Run Optimal Gradient Checkpointing on Resnet101
+Run Optimal Gradient Checkpointing on Resnet101 and benchmark training memory cost and time cost
 ```
 python main.py --arch resnet101 --device cuda:0
 ```
+
+## Train Model with Optimal Gradient Checkpointing
+An example of training on CIFAR 10 dataset can be seen at [train_cifar10.ipynb](example/train_cifar10.ipynb)
+
+## Run Optimal Gradient Checkpointing on Custom Network
+To run optimal gradient checkpointing on a custom model, you will need to provide a parse_graph function to create computation graph for your network.
+
+An example of custom model and parse_graph function can be seen at [custom_network.ipynb](example/custom_network.ipynb)
+
+We are aware that manually defining the parse_graph function can be tedious, and we are looking into automatically parsing computation graph using torch.jit or other tools. 
+We will update it when we have found a proper solution, but so far user has to manually define the parse_graph function.

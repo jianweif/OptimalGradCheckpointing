@@ -9,7 +9,7 @@ from graph import replace_subgraph, Segment
 class ArbitrarySolver():
     def __init__(self):
         self.linear_solver = LinearSolver()
-    def solve(self, G, source, target):
+    def solve(self, G, source, target, use_tqdm=True):
         print('Building Division Tree')
         graph, cost, division_type = self.build_division_tree(G, source, target)
         print('Getting Max Terms')
@@ -24,7 +24,11 @@ class ArbitrarySolver():
         best_max_term = -1
         best_gc_cost = -1
         print('Solving Optimal for Each Max Term')
-        for max_term in tqdm(max_terms):
+        if use_tqdm:
+            iterator = tqdm(max_terms)
+        else:
+            iterator = max_terms
+        for max_term in iterator:
             run_graph, gc_cost = self.solve_with_max(graph, source, target, max_term, division_type)
             total_cost = gc_cost + max_term
             if total_cost < best_total_cost:
@@ -428,7 +432,7 @@ class ArbitrarySolver():
             candidate_nodes = [node for i, node in enumerate(nodes) if np.sum(adjacency_matrix[i, :]) > 2 or node == source or node == target]
             subgraphs = []
             source_targets_all = []
-            for i in tqdm(range(len(candidate_nodes) - 1)):
+            for i in (range(len(candidate_nodes) - 1)):
                 # for j in range(i + 1, len(nodes)):
                 for j in range(len(candidate_nodes) - 1, i, -1):
                     node1, node2 = candidate_nodes[i], candidate_nodes[j]

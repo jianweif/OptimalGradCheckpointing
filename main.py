@@ -158,7 +158,7 @@ def main(arch, device):
     print('Processing {}, Input size {}'.format(arch, input_size) + '-' * 20)
     net = model_factory[arch]().to(device)
     disable_dropout(arch, net)
-    net.eval()
+    net.train()
     inp = torch.rand(*input_size).to(device)
     G, source, target = net.parse_graph(inp)
     solver = ArbitrarySolver()
