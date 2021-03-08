@@ -8,7 +8,7 @@ This is the official implementation of the paper: Jianwei Feng and Dong Huang, O
   title={Optimal Gradient Checkpoint Search for Arbitrary Computation Graphs},
   author={Jianwei Feng and Dong Huang},
   booktitle={arXiv:1808.00079},
-  year={2020}
+  year={2021}
 }
 ```
 
