@@ -1,13 +1,13 @@
 # Optimal Gradient Checkpoint Search for Arbitrary Computation Graphs
-This is the official implementation of the paper: Jianwei Feng and Dong Huang, Optimal Gradient Checkpoint Search for Arbitrary Computation Graphs, CVPR, 2021 (Oral). [arXiv version](https://arxiv.org/pdf/1808.00079v5.pdf)
+This is the official implementation of the paper: _Jianwei Feng and Dong Huang, Optimal Gradient Checkpoint Search for Arbitrary Computation Graphs, CVPR, 2021 (Oral)._ [arXiv version](https://arxiv.org/pdf/1808.00079v5.pdf)
 
 ### Citation: 
 
 ```bash
-@inproceedings{fenghuang2020,
+@inproceedings{fenghuang2021,
   title={Optimal Gradient Checkpoint Search for Arbitrary Computation Graphs},
   author={Jianwei Feng and Dong Huang},
-  booktitle={arXiv:1808.00079},
+  booktitle={CVPR},
   year={2021}
 }
 ```
