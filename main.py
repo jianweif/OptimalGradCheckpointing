@@ -159,8 +159,9 @@ def main(arch, device):
     net = model_factory[arch]().to(device)
     disable_dropout(arch, net)
     net.train()
-    inp = torch.rand(*input_size).to(device)
-    G, source, target = net.parse_graph(inp)
+    with torch.no_grad():
+        inp = torch.rand(*input_size).to(device)
+        G, source, target = net.parse_graph(inp)
     solver = ArbitrarySolver()
 
     start = time.time()
