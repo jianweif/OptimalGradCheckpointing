@@ -42,7 +42,7 @@ input_sizes = {
     'densenet161': (16, 3, 224, 224),
     'densenet169': (32, 3, 224, 224),
     'densenet201': (16, 3, 224, 224),
-    'darts_cifar10': (64, 3, 32, 32),
-    'nasnet_cifar10': (64, 3, 32, 32),
-    'amoebanet_cifar10': (64, 3, 32, 32),
+    'darts_cifar10': (32, 3, 32, 32),
+    'nasnet_cifar10': (32, 3, 32, 32),
+    'amoebanet_cifar10': (32, 3, 32, 32),
 }

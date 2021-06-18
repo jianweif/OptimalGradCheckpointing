@@ -1,6 +1,6 @@
 import torch
 from solver import ArbitrarySolver
-from graph import Segment, set_segment_training
+from graph import Segment, set_segment_training, parse_computation_graph, optimize_computation_graph, get_source_target
 from utils import set_reproductibility, disable_dropout
 import time
 import numpy as np
@@ -159,9 +159,19 @@ def main(arch, device):
     net = model_factory[arch]().to(device)
     disable_dropout(arch, net)
     net.train()
-    with torch.no_grad():
-        inp = torch.rand(*input_size).to(device)
-        G, source, target = net.parse_graph(inp)
+    # with torch.no_grad():
+    #     inp = torch.rand(*input_size).to(device)
+    #     G, source, target = net.parse_graph(inp)
+    print('Parsing Computation Graph')
+    inputs = [torch.rand(*input_size).to(device)]
+    try:
+        G, source, target = parse_computation_graph(net, inputs)
+    except:
+        print('Parsing Computation Graph with torch.jit failed, revert to manual parse_graph function')
+        with torch.no_grad():
+            inp = torch.rand(*input_size).to(device)
+            G, source, target = net.parse_graph(inp)
+
     solver = ArbitrarySolver()
 
     start = time.time()

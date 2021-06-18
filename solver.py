@@ -1,10 +1,35 @@
 import numpy as np
 import networkx as nx
+import torch
 from queue import Queue
 from tqdm import tqdm
 from utils import add_vertex_cost_to_edge
-from graph import replace_subgraph, Segment
+from graph import replace_subgraph, Segment, parse_computation_graph
 
+
+def optimal_grad_checkpointing(net, input):
+    '''
+    :param net: nn.Module, pytorch model
+    :param input: an input tensor
+    :return: run_segment: nn.Module, wrapper for optimal grad checkpointing with forward() callable for training
+    '''
+    net.train()
+    inputs = [input]
+    try:
+        G, source, target = parse_computation_graph(net, inputs)
+    except:
+        print('Parsing Computation Graph with torch.jit failed, revert to manual parse_graph function')
+        if not hasattr(net, 'parse_graph'):
+            raise Exception("net.parse_graph(input) function needs to be provided")
+        with torch.no_grad():
+            G, source, target = net.parse_graph(input)
+
+    solver = ArbitrarySolver()
+
+    run_graph, best_cost = solver.solve(G, source, target)
+    run_segment = Segment(run_graph, source, target, do_checkpoint=True)
+    torch.cuda.empty_cache()
+    return run_segment
 
 class ArbitrarySolver():
     def __init__(self):
@@ -506,7 +531,7 @@ class ArbitrarySolver():
             subgraph = G.subgraph(remaining_subgraph_nodes)
 
 
-        if len(subgraph.edges) == 0 or (not nx.is_connected(subgraph.to_undirected())):
+        if len(subgraph.edges) == 0 or (not nx.is_connected(subgraph.to_undirected(as_view=True))):
             return None
         else:
             return subgraph.copy()

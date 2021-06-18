@@ -42,6 +42,13 @@ This is the official implementation of the paper:
 |    DARTS Cifar10    | (64, 3, 32, 32) |  5627  |  1115 |  80% | 0.318 | 0.494 |      55%      |
 
 The memory numbers in the table are calculated after removing stationary memory cost such as model weights and pytorch cuda interface.
+
+## Updates
+Next step: More tests and bug fix in automatic computation graph parser
+
+2021.06.17, we implemented automatic computation graph parser using torch.jit! Now user can input an arbitrary pytorch model (nn.module) 
+and runs optimal gradient checkpointing solver without manually parsing the computation graph.
+
 ## Installation
 
 ### Requirements:
@@ -58,19 +65,31 @@ Install other dependencies.
 pip install -r requirements.txt
 ```
 
-## Run Optimal Gradient Checkpointing
+## Usage
+### Benchmark Time and Memory Performance of Optimal Gradient Checkpointing
 Run Optimal Gradient Checkpointing on Resnet101 and benchmark training memory cost and time cost
 ```
-python main.py --arch resnet101 --device cuda:0
+python benchmark.py --arch resnet101 --device cuda:0
 ```
 
-## Train Model with Optimal Gradient Checkpointing
-An example of training on CIFAR 10 dataset can be seen at [train_cifar10.ipynb](example/train_cifar10.ipynb)
+### Train Model with Optimal Gradient Checkpointing
+An example of training on CIFAR 10 dataset can be seen at [train_cifar10.ipynb](train_cifar10.ipynb)
 
-## Run Optimal Gradient Checkpointing on Custom Network
-To run optimal gradient checkpointing on a custom model, you will need to provide a parse_graph function to create computation graph for your network.
+The script will do the following:
+1. Define a pytorch model (nn.Module) and its inputs
+1. Parse the computation graph of the pytorch model with torch.jit, runs optimal gradient checkpointing algorithm, and returns a new 
+model whose forward function will execute gradient checkpointing training with optimal gradient checkpoints
+1. Run gradient checkpointing training and evaluation on CIFAR 10 for 2 epochs
 
-An example of custom model and parse_graph function can be seen at [custom_network.ipynb](example/custom_network.ipynb)
+When defining the network, we highly recommend using modules and operations in torch.nn instead of in torch.nn.functional, 
+for example use torch.nn.ReLU instead of torch.nn.functional.relu. 
 
-We are aware that manually defining the parse_graph function can be tedious, and we are looking into automatically parsing computation graph using torch.jit or other tools. 
-We will update it when we have found a proper solution, but so far user has to manually define the parse_graph function.
+So far our computation graph parser can handle operations in torch.nn pretty well but might be buggy with torch.nn.functional.
+We will continue to improve it.
+
+### Implement parse_graph function for Custom Network
+You can also implement your own parse_graph function to create computation graph for your network.
+
+An example of custom model and parse_graph function can be seen at [manual_parse_graph.ipynb](manual_parse_graph.ipynb)
+
+

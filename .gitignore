@@ -7,3 +7,4 @@ checkpoint/
 example/.ipynb_checkpoints/
 example/data/
 example/checkpoint.pth
+tmp.py
